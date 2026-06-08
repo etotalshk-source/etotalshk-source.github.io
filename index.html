@@ -138,10 +138,10 @@
     let originalBackup = null; 
     let isImageLoaded = false; 
 
-    // 【核心修正】採用全瀏覽器相容的 FileReader 讀取圖片檔案，完美修正 Edge 不顯示原圖的問題
+    // 【核心 bug 修正】精準獲取陣列第 0 個單一檔案物件
     function handleImage(files) {
         if (!files || files.length === 0) return;
-        const file = files[0]; // 準確定位到第一個檔案
+        const file = files[0]; // 修正：精確提取數組內的第一個檔案
 
         statusText.innerText = "⏳ 正在將圖片載入網頁畫布中...";
         statusText.style.color = "#f59e0b";
@@ -150,7 +150,7 @@
         reader.onload = function(e) {
             srcPlaceholder.style.display = 'none';
             imgElement.style.display = 'block';
-            imgElement.src = e.target.result; // 將圖片轉為 Base64 碼強行塞入圖片標籤
+            imgElement.src = e.target.result; 
         };
         reader.readAsDataURL(file);
     }
