@@ -20,21 +20,24 @@
         p.subtitle { color: #64748b; margin-bottom: 25px; }
         .status { color: #10b981; font-weight: bold; margin-bottom: 15px; font-size: 16px; }
         
+        /* 【徹底重寫】改用直覺的點擊區塊，100% 避開瀏覽器點擊遮擋錯誤 */
         .upload-zone {
-            display: flex; gap: 15px; justify-content: center; margin-bottom: 20px; flex-wrap: wrap;
+            display: flex; gap: 20px; justify-content: center; margin-bottom: 25px; flex-wrap: wrap;
         }
-        .btn-upload {
-            position: relative; background: #3b82f6; color: white; padding: 12px 24px;
-            border-radius: 8px; font-weight: bold; cursor: pointer; display: inline-block; border: none; font-size: 16px;
+        .upload-card {
+            background: #eff6ff; border: 2px dashed #3b82f6; border-radius: 12px;
+            padding: 15px 30px; cursor: pointer; text-align: center; transition: 0.2s;
+            font-weight: bold; color: #1d4ed8; font-size: 16px; min-width: 200px;
         }
-        .btn-upload input { position: absolute; top:0; left:0; width:100%; height:100%; opacity:0; cursor:pointer; }
+        .upload-card:hover { background: #dbeafe; }
+        .upload-card input { display: block; margin: 8px auto 0 auto; cursor: pointer; }
         
         .control-panel {
             background: #f8fafc; padding: 15px; border-radius: 12px; margin-bottom: 25px;
             display: flex; justify-content: center; gap: 20px; align-items: center; flex-wrap: wrap;
         }
         .btn {
-            color: white; border: none; padding: 10px 20px; font-size: 15px;
+            color: white; border: none; padding: 12px 24px; font-size: 16px;
             border-radius: 6px; cursor: pointer; font-weight: bold; transition: 0.2s;
         }
         .btn-blue { background: #2563eb; } .btn-blue:hover { background: #1d4ed8; }
@@ -66,18 +69,18 @@
     <h1>📝 etotalshk 試卷筆跡擦除控制中心</h1>
     <p class="subtitle">專業級別：原生 AI 去墨水 • 手動修補 • 批量打包可列印 PDF</p>
 
-    <div id="status" class="status">⚡ 系統原生引擎已就緒！請上傳或相機拍照。</div>
+    <div id="status" class="status">⚡ 系統原生引擎已就緒！請先放入考卷檔案。</div>
 
-    <!-- 1. 上傳與相機快拍 -->
+    <!-- 1. 修正後的直覺上傳區塊（直接點選內建的瀏覽按鈕最安全） -->
     <div class="upload-zone">
-        <button class="btn-upload" id="upload-btn-file">
-            📁 從相簿選取試卷
-            <input type="file" id="file-input" accept="image/*">
-        </button>
-        <button class="btn-upload" id="upload-btn-cam" style="background: #14b8a6;">
-            📸 用相機直接拍照
-            <input type="file" id="camera-input" accept="image/*" capture="environment">
-        </button>
+        <div class="upload-card" onclick="document.getElementById('file-input').click()">
+            📁 點此從相簿選取試卷
+            <input type="file" id="file-input" accept="image/*" onclick="event.stopPropagation();">
+        </div>
+        <div class="upload-card" style="background: #f0fdf4; border-color: #10b981; color: #15803d;" onclick="document.getElementById('camera-input').click()">
+            📸 點此用相機直接拍照
+            <input type="file" id="camera-input" accept="image/*" capture="environment" onclick="event.stopPropagation();">
+        </div>
     </div>
 
     <!-- 2. 控制面板 -->
@@ -86,7 +89,6 @@
             <input type="number" id="strength" value="5" min="1" max="10" style="width: 45px; padding: 5px;">
         </label>
 
-        <!-- 【修正】此按鈕不再預設 disabled 鎖定，永遠可以點擊 -->
         <button id="process-btn" class="btn btn-blue">✨ 執行 AI 自動擦除</button>
 
         <div class="tool-select">
@@ -104,7 +106,7 @@
         <div class="box">
             <h3>原圖（含有手寫字）</h3>
             <div class="img-wrap">
-                <span id="text-src-placeholder" class="placeholder-text">📸 請先點擊上方按鈕拍照或上傳試卷</span>
+                <span id="text-src-placeholder" class="placeholder-text">📸 請先透過上方功能框放入試卷照片</span>
                 <img id="image-src" alt="原圖" />
             </div>
         </div>
@@ -135,11 +137,12 @@
     let isDrawing = false;
     let currentTool = 'erase'; 
     let originalBackup = null; 
-    let isImageLoaded = false; // 新增變數：用來記錄圖片是否真的加載進來了
+    let isImageLoaded = false; 
 
-    function handleImage(file) {
-        if (!file) return;
-        statusText.innerText = "⏳ 正在載入圖片中...";
+    function handleImage(files) {
+        if (!files || files.length === 0) return;
+        const file = files[0];
+        statusText.innerText = "⏳ 正在將圖片載入網頁畫布中...";
         statusText.style.color = "#f59e0b";
         
         srcPlaceholder.style.display = 'none';
@@ -147,24 +150,23 @@
         imgElement.src = URL.createObjectURL(file);
     }
     
-    fileInput.addEventListener('change', (e) => handleImage(e.target.files[0]));
-    cameraInput.addEventListener('change', (e) => handleImage(e.target.files[0]));
+    fileInput.addEventListener('change', (e) => handleImage(e.target.files));
+    cameraInput.addEventListener('change', (e) => handleImage(e.target.files));
 
     imgElement.onload = function() {
-        isImageLoaded = true; // 標記圖片就緒
-        statusText.innerText = "👍 圖片載入完成，請點選「執行 AI 自動擦除」。";
+        isImageLoaded = true; 
+        statusText.innerText = "👍 圖片已成功載入！請點選下方的「✨ 執行 AI 自動擦除」。";
         statusText.style.color = "#2563eb";
     };
 
     // 點擊執行自動擦除
     processBtn.addEventListener('click', () => {
-        // 【防呆修正】如果根本沒加載圖片，直接跳出警示
         if (!isImageLoaded) {
-            alert("請先點選上方的按鈕選取試卷或用相機拍照，再執行擦除功能喔！");
+            alert("請先點選上方的藍色或綠色框選取您的考卷照片，確認左邊看到圖片後再按我喔！");
             return;
         }
 
-        statusText.innerText = "⏳ 正在分析結構、移除筆跡並漂白背景...";
+        statusText.innerText = "⏳ 原生演算法分析中，正在漂白並濾除手寫墨水...";
         statusText.style.color = "#f59e0b";
 
         setTimeout(() => {
@@ -205,7 +207,7 @@
 
                 originalBackup = ctx.getImageData(0, 0, canvas.width, canvas.height);
 
-                statusText.innerText = "✅ 擦除完成！若有部分筆跡殘留，可直接在右側試卷上用「橡皮擦」手動抹除。";
+                statusText.innerText = "✅ 擦除完成！若有殘留陰影，可直接在右側考卷上用「橡皮擦」手動塗抹。";
                 statusText.style.color = "#10b981";
                 pdfBtn.disabled = false;
             } catch (err) {
@@ -233,9 +235,3 @@
         const clientX = e.touches ? e.touches.clientX : e.clientX;
         const clientY = e.touches ? e.touches.clientY : e.clientY;
         return {
-            x: (clientX - rect.left) * (canvas.width / rect.width),
-            y: (clientY - rect.top) * (canvas.height / rect.height)
-        };
-    }
-
-    function startDraw(e) { if(!originalBackup) return; isDrawing = true; draw(e); }
