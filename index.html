@@ -20,7 +20,6 @@
         p.subtitle { color: #64748b; margin-bottom: 25px; }
         .status { color: #10b981; font-weight: bold; margin-bottom: 15px; font-size: 16px; }
         
-        /* 網址輸入框美化 */
         .url-zone {
             background: #f1f5f9; padding: 15px; border-radius: 12px; margin-bottom: 20px;
             display: flex; gap: 10px; justify-content: center; align-items: center; flex-wrap: wrap;
@@ -77,16 +76,16 @@
     <h1>📝 etotalshk 試卷筆跡擦除控制中心</h1>
     <p class="subtitle">專業級別：原生 AI 去墨水 • 手動修補 • 批量打包可列印 PDF</p>
 
-    <div id="status" class="status">⚡ 系統原生引擎已就緒！請透過網址或本地檔案放入考卷。</div>
+    <div id="status" class="status">⚡ 系統原生引擎已就緒！請選擇一種方式放入考卷。</div>
 
-    <!-- 【新增】方案 A：最穩定的網路圖片網址載入功能，直接跳過本地讀取 Bug -->
+    <!-- 方案 A：網路圖片網址載入功能 -->
     <div class="url-zone">
-        <span>🔗 方案 A (推薦)：輸入網路圖片網址 </span>
+        <span>🔗 方案 A：輸入網路圖片網址 </span>
         <input type="text" id="url-input" class="url-input" placeholder="請在此貼上圖片連結 (例如: https://.../image.jpg)">
         <button id="url-btn" class="btn btn-blue" style="padding: 8px 15px; font-size: 14px;">載入網路圖</button>
     </div>
 
-    <!-- 方案 B：原本的本地上傳區塊 -->
+    <!-- 方案 B / C：本地上傳與相機 -->
     <div class="upload-zone">
         <div class="upload-card" onclick="document.getElementById('file-input').click()">
             📁 方案 B：點此從相簿選取試卷
@@ -156,27 +155,29 @@
     let originalBackup = null; 
     let isImageLoaded = false; 
 
-    // 新增：透過網址載入網路圖片的功能
-    urlBtn.addEventListener('click', () => {
+    // 【100% 獨立安全重寫】方案 A：網址讀取邏輯
+    urlBtn.addEventListener('click', function() {
         const url = urlInput.value.trim();
         if (!url) {
             alert("請先貼上有效的圖片網址喔！");
             return;
         }
-        statusText.innerText = "⏳ 正在從網址下載並載入圖片中...";
+        isImageLoaded = false;
+        statusText.innerText = "⏳ 正在嘗試從網址載入圖片...";
         statusText.style.color = "#f59e0b";
         
         srcPlaceholder.style.display = 'none';
         imgElement.style.display = 'block';
-        imgElement.src = url; // 直接指派網址給 img 標籤
+        imgElement.src = url; 
     });
 
-    // 備用的本地檔案載入功能
-    function handleImage(event) {
-        const files = event.target.files;
-        if (!files || files.length === 0) return;
-        
-        statusText.innerText = "⏳ 正在嘗試載入本地圖片...";
+    // 【100% 獨立安全重寫】方案 B / C：本地讀取邏輯
+    function loadLocalFile(inputElement) {
+        if (!inputElement.files || inputElement.files.length === 0) return;
+        const file = inputElement.files[0]; // 精確定位第一個檔案
+
+        isImageLoaded = false;
+        statusText.innerText = "⏳ 正在嘗試載入本地選取圖片...";
         statusText.style.color = "#f59e0b";
         
         const reader = new FileReader();
@@ -185,13 +186,13 @@
             imgElement.style.display = 'block';
             imgElement.src = e.target.result; 
         };
-        reader.readAsDataURL(files[0]);
+        reader.readAsDataURL(file);
     }
     
-    fileInput.addEventListener('change', handleImage);
-    cameraInput.addEventListener('change', handleImage);
+    fileInput.addEventListener('change', function() { loadLocalFile(fileInput); });
+    cameraInput.addEventListener('change', function() { loadLocalFile(cameraInput); });
 
-    // 當圖片（不論是網址還是本地檔案）成功顯示在網頁上時觸發
+    // 萬流歸宗：不論是網址還是本地檔案，只要 img 標籤成功渲染圖片就觸發此處
     imgElement.onload = function() {
         isImageLoaded = true; 
         statusText.innerText = "👍 圖片已成功載入！請點選下方的「✨ 執行 AI 自動擦除」。";
@@ -199,21 +200,21 @@
     };
 
     imgElement.onerror = function() {
-        statusText.innerText = "❌ 圖片載入失敗。若是使用網址，請確認連結是否正確；若是本地檔案，代表瀏覽器權限受阻，請改用網址功能。";
+        statusText.innerText = "❌ 圖片載入失敗。請檢查網址是否正確，或嘗試更換另一張考卷圖片。";
         statusText.style.color = "#ef4444";
     };
 
     // 點擊執行自動擦除
-    processBtn.addEventListener('click', () => {
+    processBtn.addEventListener('click', function() {
         if (!isImageLoaded) {
-            alert("請先成功載入圖片，確認左邊看到圖片後再點擊執行喔！");
+            alert("請確認左側方框內已經看到您的試卷圖片，再點擊執行喔！");
             return;
         }
 
-        statusText.innerText = "⏳ 原生演算法分析中，正在漂白並濾除手寫墨水...";
+        statusText.innerText = "⏳ 演算法分析中，正在移除筆跡並漂白背景...";
         statusText.style.color = "#f59e0b";
 
-        setTimeout(() => {
+        setTimeout(function() {
             try {
                 canvas.width = imgElement.naturalWidth;
                 canvas.height = imgElement.naturalHeight;
@@ -234,5 +235,3 @@
                     let brightness = 0.299 * r + 0.587 * g + 0.114 * b;
                     
                     if (brightness > threshold || (b - r > 15) || (r - b > 25)) {
-                        data[i] = 255;     
-                        data[i + 1] = 255; 
