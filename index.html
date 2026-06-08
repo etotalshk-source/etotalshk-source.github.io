@@ -4,7 +4,6 @@
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>etotalshk - 專業試卷筆跡擦除與 PDF 打包平台</title>
-    <!-- 只引入生成 PDF 的輕量庫（此庫極為穩定且無跨域問題） -->
     <script src="https://cloudflare.com"></script>
     <style>
         body {
@@ -67,7 +66,6 @@
     <h1>📝 etotalshk 試卷筆跡擦除控制中心</h1>
     <p class="subtitle">專業級別：原生 AI 去墨水 • 手動修補 • 批量打包可列印 PDF</p>
 
-    <!-- 【升級】打開網頁即刻就緒，100% 不卡死 -->
     <div id="status" class="status">⚡ 系統原生引擎已就緒！請上傳或相機拍照。</div>
 
     <!-- 1. 上傳與相機快拍 -->
@@ -82,13 +80,14 @@
         </button>
     </div>
 
-    <!-- 2. 控制與手動橡皮擦面板 -->
+    <!-- 2. 控制面板 -->
     <div class="control-panel">
         <label>去筆跡強度偏好 (1-10)：
             <input type="number" id="strength" value="5" min="1" max="10" style="width: 45px; padding: 5px;">
         </label>
 
-        <button id="process-btn" class="btn btn-blue" disabled>✨ 執行 AI 自動擦除</button>
+        <!-- 【修正】此按鈕不再預設 disabled 鎖定，永遠可以點擊 -->
+        <button id="process-btn" class="btn btn-blue">✨ 執行 AI 自動擦除</button>
 
         <div class="tool-select">
             <span>局部手動修補：</span>
@@ -136,6 +135,7 @@
     let isDrawing = false;
     let currentTool = 'erase'; 
     let originalBackup = null; 
+    let isImageLoaded = false; // 新增變數：用來記錄圖片是否真的加載進來了
 
     function handleImage(file) {
         if (!file) return;
@@ -151,63 +151,58 @@
     cameraInput.addEventListener('change', (e) => handleImage(e.target.files[0]));
 
     imgElement.onload = function() {
-        processBtn.disabled = false;
+        isImageLoaded = true; // 標記圖片就緒
         statusText.innerText = "👍 圖片載入完成，請點選「執行 AI 自動擦除」。";
         statusText.style.color = "#2563eb";
     };
 
-    // 【核心修正】採用原生像素級亮度動態漂白演算法（完全取代 OpenCV）
+    // 點擊執行自動擦除
     processBtn.addEventListener('click', () => {
+        // 【防呆修正】如果根本沒加載圖片，直接跳出警示
+        if (!isImageLoaded) {
+            alert("請先點選上方的按鈕選取試卷或用相機拍照，再執行擦除功能喔！");
+            return;
+        }
+
         statusText.innerText = "⏳ 正在分析結構、移除筆跡並漂白背景...";
         statusText.style.color = "#f59e0b";
 
         setTimeout(() => {
             try {
-                // 設定畫布與原圖尺寸1:1
                 canvas.width = imgElement.naturalWidth;
                 canvas.height = imgElement.naturalHeight;
                 
-                // 1. 先將原圖繪製到畫布上
                 ctx.drawImage(imgElement, 0, 0);
                 
-                // 2. 獲取所有像素數據 (RGBA)
                 let imgData = ctx.getImageData(0, 0, canvas.width, canvas.height);
                 let data = imgData.data;
                 
-                // 3. 取得用戶調整的閥值強度（強度越高，漂白力越強）
                 let strengthVal = parseInt(document.getElementById('strength').value) || 5;
                 let threshold = 110 + (strengthVal * 10); 
 
-                // 4. 像素遍歷算法：消除彩色筆跡（藍色、紅色原子筆）與灰色鉛筆
                 for (let i = 0; i < data.length; i += 4) {
-                    let r = data[i];     // 紅
-                    let g = data[i + 1]; // 綠
-                    let b = data[i + 2]; // 藍
+                    let r = data[i];     
+                    let g = data[i + 1]; 
+                    let b = data[i + 2]; 
                     
-                    // 計算該像素點的感知灰階亮度
                     let brightness = 0.299 * r + 0.587 * g + 0.114 * b;
                     
-                    // 核心逻辑：如果該點偏亮，或者藍色/紅色通道特別突出（通常是手寫原子筆跡）
-                    // 則將其強制判定為背景「純白色」
                     if (brightness > threshold || (b - r > 15) || (r - b > 25)) {
-                        data[i] = 255;     // R
-                        data[i + 1] = 255; // G
-                        data[i + 2] = 255; // B
+                        data[i] = 255;     
+                        data[i + 1] = 255; 
+                        data[i + 2] = 255; 
                     } else {
-                        // 否則判定為試卷本身的黑色印刷字體，強行將其變深、使其更清晰
                         data[i] = 0;
                         data[i + 1] = 0;
                         data[i + 2] = 0;
                     }
                 }
                 
-                // 5. 將處理完的乾淨像素寫回畫布
                 ctx.putImageData(imgData, 0, 0);
 
                 dstPlaceholder.style.display = 'none';
                 canvas.style.display = 'block';
 
-                // 儲存目前快照以便手動擦除/還原
                 originalBackup = ctx.getImageData(0, 0, canvas.width, canvas.height);
 
                 statusText.innerText = "✅ 擦除完成！若有部分筆跡殘留，可直接在右側試卷上用「橡皮擦」手動抹除。";
@@ -235,4 +230,12 @@
 
     function getMousePos(e) {
         const rect = canvas.getBoundingClientRect();
-        const clientX = e.touches ? e.touches[0].clientX : e.clientX;
+        const clientX = e.touches ? e.touches.clientX : e.clientX;
+        const clientY = e.touches ? e.touches.clientY : e.clientY;
+        return {
+            x: (clientX - rect.left) * (canvas.width / rect.width),
+            y: (clientY - rect.top) * (canvas.height / rect.height)
+        };
+    }
+
+    function startDraw(e) { if(!originalBackup) return; isDrawing = true; draw(e); }
