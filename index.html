@@ -20,7 +20,6 @@
         p.subtitle { color: #64748b; margin-bottom: 25px; }
         .status { color: #10b981; font-weight: bold; margin-bottom: 15px; font-size: 16px; }
         
-        /* 【徹底重寫】改用直覺的點擊區塊，100% 避開瀏覽器點擊遮擋錯誤 */
         .upload-zone {
             display: flex; gap: 20px; justify-content: center; margin-bottom: 25px; flex-wrap: wrap;
         }
@@ -71,7 +70,7 @@
 
     <div id="status" class="status">⚡ 系統原生引擎已就緒！請先放入考卷檔案。</div>
 
-    <!-- 1. 修正後的直覺上傳區塊（直接點選內建的瀏覽按鈕最安全） -->
+    <!-- 1. 上傳區塊 -->
     <div class="upload-zone">
         <div class="upload-card" onclick="document.getElementById('file-input').click()">
             📁 點此從相簿選取試卷
@@ -139,15 +138,21 @@
     let originalBackup = null; 
     let isImageLoaded = false; 
 
+    // 【核心修正】採用全瀏覽器相容的 FileReader 讀取圖片檔案，完美修正 Edge 不顯示原圖的問題
     function handleImage(files) {
         if (!files || files.length === 0) return;
-        const file = files[0];
+        const file = files[0]; // 準確定位到第一個檔案
+
         statusText.innerText = "⏳ 正在將圖片載入網頁畫布中...";
         statusText.style.color = "#f59e0b";
         
-        srcPlaceholder.style.display = 'none';
-        imgElement.style.display = 'block';
-        imgElement.src = URL.createObjectURL(file);
+        const reader = new FileReader();
+        reader.onload = function(e) {
+            srcPlaceholder.style.display = 'none';
+            imgElement.style.display = 'block';
+            imgElement.src = e.target.result; // 將圖片轉為 Base64 碼強行塞入圖片標籤
+        };
+        reader.readAsDataURL(file);
     }
     
     fileInput.addEventListener('change', (e) => handleImage(e.target.files));
@@ -232,6 +237,3 @@
 
     function getMousePos(e) {
         const rect = canvas.getBoundingClientRect();
-        const clientX = e.touches ? e.touches.clientX : e.clientX;
-        const clientY = e.touches ? e.touches.clientY : e.clientY;
-        return {
