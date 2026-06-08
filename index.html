@@ -20,6 +20,15 @@
         p.subtitle { color: #64748b; margin-bottom: 25px; }
         .status { color: #10b981; font-weight: bold; margin-bottom: 15px; font-size: 16px; }
         
+        /* 網址輸入框美化 */
+        .url-zone {
+            background: #f1f5f9; padding: 15px; border-radius: 12px; margin-bottom: 20px;
+            display: flex; gap: 10px; justify-content: center; align-items: center; flex-wrap: wrap;
+        }
+        .url-input {
+            width: 60%; min-width: 250px; padding: 10px; border: 1px solid #cbd5e1; border-radius: 6px; font-size: 14px;
+        }
+
         .upload-zone {
             display: flex; gap: 20px; justify-content: center; margin-bottom: 25px; flex-wrap: wrap;
         }
@@ -68,16 +77,23 @@
     <h1>📝 etotalshk 試卷筆跡擦除控制中心</h1>
     <p class="subtitle">專業級別：原生 AI 去墨水 • 手動修補 • 批量打包可列印 PDF</p>
 
-    <div id="status" class="status">⚡ 系統原生引擎已就緒！請先放入考卷檔案。</div>
+    <div id="status" class="status">⚡ 系統原生引擎已就緒！請透過網址或本地檔案放入考卷。</div>
 
-    <!-- 1. 上傳區塊 -->
+    <!-- 【新增】方案 A：最穩定的網路圖片網址載入功能，直接跳過本地讀取 Bug -->
+    <div class="url-zone">
+        <span>🔗 方案 A (推薦)：輸入網路圖片網址 </span>
+        <input type="text" id="url-input" class="url-input" placeholder="請在此貼上圖片連結 (例如: https://.../image.jpg)">
+        <button id="url-btn" class="btn btn-blue" style="padding: 8px 15px; font-size: 14px;">載入網路圖</button>
+    </div>
+
+    <!-- 方案 B：原本的本地上傳區塊 -->
     <div class="upload-zone">
         <div class="upload-card" onclick="document.getElementById('file-input').click()">
-            📁 點此從相簿選取試卷
+            📁 方案 B：點此從相簿選取試卷
             <input type="file" id="file-input" accept="image/*" onclick="event.stopPropagation();">
         </div>
         <div class="upload-card" style="background: #f0fdf4; border-color: #10b981; color: #15803d;" onclick="document.getElementById('camera-input').click()">
-            📸 點此用相機直接拍照
+            📸 方案 C：點此用相機直接拍照
             <input type="file" id="camera-input" accept="image/*" capture="environment" onclick="event.stopPropagation();">
         </div>
     </div>
@@ -106,7 +122,7 @@
             <h3>原圖（含有手寫字）</h3>
             <div class="img-wrap">
                 <span id="text-src-placeholder" class="placeholder-text">📸 請先透過上方功能框放入試卷照片</span>
-                <img id="image-src" alt="原圖" />
+                <img id="image-src" alt="原圖" crossorigin="anonymous" />
             </div>
         </div>
         <div class="box">
@@ -123,6 +139,8 @@
     const imgElement = document.getElementById('image-src');
     const fileInput = document.getElementById('file-input');
     const cameraInput = document.getElementById('camera-input');
+    const urlInput = document.getElementById('url-input');
+    const urlBtn = document.getElementById('url-btn');
     const processBtn = document.getElementById('process-btn');
     const pdfBtn = document.getElementById('pdf-btn');
     const statusText = document.getElementById('status');
@@ -138,14 +156,27 @@
     let originalBackup = null; 
     let isImageLoaded = false; 
 
-    // 【核心修正】採用全瀏覽器、跨平台最穩定的標準取檔事件機制
+    // 新增：透過網址載入網路圖片的功能
+    urlBtn.addEventListener('click', () => {
+        const url = urlInput.value.trim();
+        if (!url) {
+            alert("請先貼上有效的圖片網址喔！");
+            return;
+        }
+        statusText.innerText = "⏳ 正在從網址下載並載入圖片中...";
+        statusText.style.color = "#f59e0b";
+        
+        srcPlaceholder.style.display = 'none';
+        imgElement.style.display = 'block';
+        imgElement.src = url; // 直接指派網址給 img 標籤
+    });
+
+    // 備用的本地檔案載入功能
     function handleImage(event) {
         const files = event.target.files;
         if (!files || files.length === 0) return;
         
-        const file = files[0]; // 修正：使用最標準的陣列索引取出檔案本身
-
-        statusText.innerText = "⏳ 正在將圖片載入網頁畫布中...";
+        statusText.innerText = "⏳ 正在嘗試載入本地圖片...";
         statusText.style.color = "#f59e0b";
         
         const reader = new FileReader();
@@ -154,27 +185,28 @@
             imgElement.style.display = 'block';
             imgElement.src = e.target.result; 
         };
-        reader.onerror = function() {
-            statusText.innerText = "❌ 瀏覽器讀取檔案失敗，請換一張圖片試試。";
-            statusText.style.color = "#ef4444";
-        };
-        reader.readAsDataURL(file);
+        reader.readAsDataURL(files[0]);
     }
     
-    // 修正監聽器：直接傳遞整個 event 物件
-    fileInput.addEventListener('change', (e) => handleImage(e));
-    cameraInput.addEventListener('change', (e) => handleImage(e));
+    fileInput.addEventListener('change', handleImage);
+    cameraInput.addEventListener('change', handleImage);
 
+    // 當圖片（不論是網址還是本地檔案）成功顯示在網頁上時觸發
     imgElement.onload = function() {
         isImageLoaded = true; 
         statusText.innerText = "👍 圖片已成功載入！請點選下方的「✨ 執行 AI 自動擦除」。";
         statusText.style.color = "#2563eb";
     };
 
+    imgElement.onerror = function() {
+        statusText.innerText = "❌ 圖片載入失敗。若是使用網址，請確認連結是否正確；若是本地檔案，代表瀏覽器權限受阻，請改用網址功能。";
+        statusText.style.color = "#ef4444";
+    };
+
     // 點擊執行自動擦除
     processBtn.addEventListener('click', () => {
         if (!isImageLoaded) {
-            alert("請先選取您的考卷照片，確認左邊看到圖片後再點擊執行喔！");
+            alert("請先成功載入圖片，確認左邊看到圖片後再點擊執行喔！");
             return;
         }
 
@@ -204,37 +236,3 @@
                     if (brightness > threshold || (b - r > 15) || (r - b > 25)) {
                         data[i] = 255;     
                         data[i + 1] = 255; 
-                        data[i + 2] = 255; 
-                    } else {
-                        data[i] = 0;
-                        data[i + 1] = 0;
-                        data[i + 2] = 0;
-                    }
-                }
-                
-                ctx.putImageData(imgData, 0, 0);
-
-                dstPlaceholder.style.display = 'none';
-                canvas.style.display = 'block';
-
-                originalBackup = ctx.getImageData(0, 0, canvas.width, canvas.height);
-
-                statusText.innerText = "✅ 擦除完成！若有殘留陰影，可直接在右側考卷上用「橡皮擦」手動塗抹。";
-                statusText.style.color = "#10b981";
-                pdfBtn.disabled = false;
-            } catch (err) {
-                statusText.innerText = "❌ 處理失敗，請換一張更清晰的圖片再試。";
-                statusText.style.color = "#ef4444";
-                console.error(err);
-            }
-        }, 50);
-    });
-
-    // 手動局部修補功能
-    document.getElementById('tool-erase').addEventListener('click', (e) => {
-        currentTool = 'erase';
-        document.querySelectorAll('.tool-btn').forEach(b => b.classList.remove('active'));
-        e.target.classList.add('active');
-    });
-    document.getElementById('tool-restore').addEventListener('click', (e) => {
-        currentTool = 'restore';
