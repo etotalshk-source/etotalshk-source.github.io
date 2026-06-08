@@ -4,8 +4,8 @@
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>etotalshk - 專業試卷筆跡擦除與 PDF 打包平台</title>
-    <!-- 引入 OpenCV.js (圖像處理) 與 jsPDF (生成 PDF) -->
-    <script async src="https://opencv.org" onload="onOpenCvReady();" type="text/javascript"></script>
+    <!-- 【修正】改用穩定且無跨域限制的 CDNJS 公共庫 -->
+    <script async src="https://cloudflare.com" onload="onOpenCvReady();" onerror="onOpenCvError();" type="text/javascript"></script>
     <script src="https://cloudflare.com"></script>
     <style>
         body {
@@ -20,9 +20,8 @@
         }
         h1 { color: #1e3a8a; margin-bottom: 5px; }
         p.subtitle { color: #64748b; margin-bottom: 25px; }
-        .status { color: #f59e0b; font-weight: bold; margin-bottom: 15px; }
+        .status { color: #f59e0b; font-weight: bold; margin-bottom: 15px; font-size: 16px; }
         
-        /* 上傳與相機區域 */
         .upload-zone {
             display: flex; gap: 15px; justify-content: center; margin-bottom: 20px; flex-wrap: wrap;
         }
@@ -32,7 +31,6 @@
         }
         .btn-upload input { position: absolute; top:0; left:0; width:100%; height:100%; opacity:0; cursor:pointer; }
         
-        /* 控制面板 */
         .control-panel {
             background: #f8fafc; padding: 15px; border-radius: 12px; margin-bottom: 25px;
             display: flex; justify-content: center; gap: 20px; align-items: center; flex-wrap: wrap;
@@ -44,18 +42,24 @@
         .btn-blue { background: #2563eb; } .btn-blue:hover { background: #1d4ed8; }
         .btn-green { background: #10b981; } .btn-green:hover { background: #059669; }
         .btn-purple { background: #8b5cf6; } .btn-purple:hover { background: #7c3aed; }
-        .btn:disabled, .btn-upload:has(input:disabled) { background: #cbd5e1; cursor: not-allowed; }
+        .btn:disabled { background: #cbd5e1 !important; cursor: not-allowed !allowed; }
 
-        /* 工具選擇 */
         .tool-select { display: flex; gap: 10px; align-items: center; }
         .tool-btn { background: #e2e8f0; border: 1px solid #cbd5e1; padding: 6px 12px; border-radius: 4px; cursor: pointer; }
         .tool-btn.active { background: #3b82f6; color: white; border-color: #2563eb; }
 
-        /* 工作與預覽區 */
         .preview-area { display: flex; gap: 20px; justify-content: center; flex-wrap: wrap; }
         .box { flex: 1; min-width: 300px; max-width: 480px; }
         .box h3 { color: #334155; margin-bottom: 10px; }
-        img, canvas { max-width: 100%; height: auto; border: 1px solid #e2e8f0; border-radius: 8px; background: #fff; }
+        
+        /* 【修正】解決未上傳前的破圖與空畫布美化 */
+        .img-wrap, .canvas-wrap { 
+            width: 100%; min-height: 400px; border: 2px dashed #cbd5e1; 
+            border-radius: 8px; background: #fafafa; display: flex; 
+            align-items: center; justify-content: center; overflow: hidden;
+        }
+        img, canvas { max-width: 100%; height: auto; display: none; }
+        .placeholder-text { color: #94a3b8; font-size: 14px; }
         canvas { cursor: crosshair; }
     </style>
 </head>
@@ -66,18 +70,18 @@
     <p class="subtitle">專業級別：AI 去墨水 • 手動修補 • 批量打包可列印 PDF</p>
 
     <!-- 系統狀態提示 -->
-    <div id="status" class="status">正在加載 AI 圖像處理引擎，請稍候...</div>
+    <div id="status" class="status">⏳ 正在載入 AI 圖像處理引擎（約需 5-10 秒），請稍候...</div>
 
-    <!-- 1. 上傳與相機快拍（支援即拍即傳） -->
+    <!-- 1. 上傳與相機快拍 -->
     <div class="upload-zone">
-        <div class="btn-upload" id="upload-box-file">
+        <button class="btn-upload" id="upload-btn-file" style="border:none;" disabled>
             📁 從相簿選取試卷
-            <input type="file" id="file-input" accept="image/*" disabled>
-        </div>
-        <div class="btn-upload" id="upload-box-cam" style="background: #14b8a6;">
+            <input type="file" id="file-input" accept="image/*">
+        </button>
+        <button class="btn-upload" id="upload-btn-cam" style="background: #14b8a6; border:none;" disabled>
             📸 用相機直接拍照
-            <input type="file" id="camera-input" accept="image/*" capture="environment" disabled>
-        </div>
+            <input type="file" id="camera-input" accept="image/*" capture="environment">
+        </button>
     </div>
 
     <!-- 2. 控制與手動橡皮擦面板 -->
@@ -88,7 +92,6 @@
 
         <button id="process-btn" class="btn btn-blue" disabled>✨ 執行 AI 自動擦除</button>
 
-        <!-- 手動局部修補工具 -->
         <div class="tool-select">
             <span>局部手動修補：</span>
             <button id="tool-erase" class="tool-btn active">⚪ 橡皮擦(變白)</button>
@@ -103,11 +106,17 @@
     <div class="preview-area">
         <div class="box">
             <h3>原圖（含有手寫字）</h3>
-            <img id="image-src" alt="請先上傳或拍照..." />
+            <div class="img-wrap">
+                <span id="text-src-placeholder" class="placeholder-text">📸 請先點擊上方按鈕拍照或上傳試卷</span>
+                <img id="image-src" alt="原圖" />
+            </div>
         </div>
         <div class="box">
             <h3>處理結果（可直接手動塗抹修改）</h3>
-            <canvas id="canvas-output"></canvas>
+            <div class="canvas-wrap">
+                <span id="text-dst-placeholder" class="placeholder-text">✨ 點擊「執行 AI 自動擦除」後在此顯示</span>
+                <canvas id="canvas-output"></canvas>
+            </div>
         </div>
     </div>
 </div>
@@ -121,27 +130,39 @@
     const statusText = document.getElementById('status');
     const canvas = document.getElementById('canvas-output');
     const ctx = canvas.getContext('2d');
+    
+    const srcPlaceholder = document.getElementById('text-src-placeholder');
+    const dstPlaceholder = document.getElementById('text-dst-placeholder');
 
-    let pdfPages = []; // 儲存準備打包的試卷頁面
+    let pdfPages = []; 
     let isDrawing = false;
-    let currentTool = 'erase'; // erase = 塗白, restore = 複製原圖歷史
-    let originalBackup = null; // 用於局部恢復的原圖數據
+    let currentTool = 'erase'; 
+    let originalBackup = null; 
 
-    // 當 OpenCV 加載成功
+    // 當 OpenCV 成功載入
     function onOpenCvReady() {
-        statusText.innerText = "⚡ 系統引擎已就緒！請點擊上方按鈕上傳或相機拍照。";
+        statusText.innerText = "⚡ 系統引擎已就緒！請上傳或拍照。";
         statusText.style.color = "#10b981";
-        fileInput.disabled = false;
-        cameraInput.disabled = false;
+        document.getElementById('upload-btn-file').disabled = false;
+        document.getElementById('upload-btn-cam').disabled = false;
     }
 
-    // 處理圖片載入匯入
+    // 當 OpenCV 載入失敗時的備用提示
+    function onOpenCvError() {
+        statusText.innerText = "❌ 引擎載入失敗，請重新整理網頁再試。";
+        statusText.style.color = "#ef4444";
+    }
+
     function handleImage(file) {
         if (!file) return;
         statusText.innerText = "⏳ 正在載入圖片中...";
         statusText.style.color = "#f59e0b";
+        
+        srcPlaceholder.style.display = 'none';
+        imgElement.style.display = 'block';
         imgElement.src = URL.createObjectURL(file);
     }
+    
     fileInput.addEventListener('change', (e) => handleImage(e.target.files[0]));
     cameraInput.addEventListener('change', (e) => handleImage(e.target.files[0]));
 
@@ -151,9 +172,9 @@
         statusText.style.color = "#2563eb";
     };
 
-    // 功能一：AI 自動擦除演算法
+    // AI 自動擦除
     processBtn.addEventListener('click', () => {
-        statusText.innerText = "⏳ AI 正在智能分析結構、移除筆跡並漂白背景...";
+        statusText.innerText = "⏳ AI 正在移除筆跡並漂白背景...";
         statusText.style.color = "#f59e0b";
 
         setTimeout(() => {
@@ -162,23 +183,21 @@
                 let gray = new cv.Mat();
                 let dst = new cv.Mat();
 
-                // 轉為灰階（初步濾除彩色原子筆墨水）
                 cv.cvtColor(src, gray, cv.COLOR_RGBA2GRAY, 0);
 
-                // 自適應黑白二值化（強制漂白背景，抹除手寫痕跡，保留深色印刷字）
                 let strengthVal = parseInt(document.getElementById('strength').value) || 3;
                 let blockSize = 21 + (strengthVal * 2);
                 cv.adaptiveThreshold(gray, dst, 255, cv.ADAPTIVE_THRESH_GAUSSIAN_C, cv.THRESH_BINARY, blockSize, 15);
 
-                // 渲染到網頁 Canvas 上
+                dstPlaceholder.style.display = 'none';
+                canvas.style.display = 'block';
                 cv.imshow('canvas-output', dst);
 
-                // 備份一份原始影像快照，以便後續進行「手動局部恢復」
                 originalBackup = ctx.getImageData(0, 0, canvas.width, canvas.height);
 
                 src.delete(); gray.delete(); dst.delete();
 
-                statusText.innerText = "✅ AI 擦除完成！若局部有瑕疵，可直接在右側畫布進行「手動修補」。";
+                statusText.innerText = "✅ 擦除完成！若有殘留瑕疵，可直接在右側考卷上擦除。";
                 statusText.style.color = "#10b981";
                 pdfBtn.disabled = false;
             } catch (err) {
@@ -189,7 +208,7 @@
         }, 50);
     });
 
-    // 功能二：手動修補與橡皮擦滑鼠/觸控事件
+    // 手動局部修補
     document.getElementById('tool-erase').addEventListener('click', (e) => {
         currentTool = 'erase';
         document.querySelectorAll('.tool-btn').forEach(b => b.classList.remove('active'));
@@ -203,7 +222,6 @@
 
     function getMousePos(e) {
         const rect = canvas.getBoundingClientRect();
-        // 相容手機觸控與滑鼠
         const clientX = e.touches ? e.touches[0].clientX : e.clientX;
         const clientY = e.touches ? e.touches[0].clientY : e.clientY;
         return {
@@ -219,26 +237,3 @@
         if (!isDrawing) return;
         e.preventDefault();
         const pos = getMousePos(e);
-        const brushSize = document.getElementById('brush-size').value;
-
-        ctx.lineWidth = brushSize;
-        ctx.lineCap = 'round';
-
-        if (currentTool === 'erase') {
-            // 橡皮擦模式：直接將局部塗抹為純白色
-            ctx.strokeStyle = '#ffffff';
-            ctx.lineTo(pos.x, pos.y);
-            ctx.stroke();
-            ctx.beginPath();
-            ctx.moveTo(pos.x, pos.y);
-        } else if (currentTool === 'restore') {
-            // 恢復模式：將原始拍照的色彩數據局部貼回來
-            ctx.save();
-            ctx.beginPath();
-            ctx.arc(pos.x, pos.y, brushSize / 2, 0, Math.PI * 2);
-            ctx.clip();
-            // 建立一個臨時 canvas 把原圖蓋上來
-            let tempCanvas = document.createElement('canvas');
-            tempCanvas.width = canvas.width; tempCanvas.height = canvas.height;
-            let tempCtx = tempCanvas.getContext('2d');
-            tempCtx.drawImage(imgElement, 0, 0, canvas.width, canvas.height);
