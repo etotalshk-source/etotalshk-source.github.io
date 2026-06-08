@@ -1,1 +1,244 @@
+<!DOCTYPE html>
+<html lang="zh-Hant-HK">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>etotalshk - 專業試卷筆跡擦除與 PDF 打包平台</title>
+    <!-- 引入 OpenCV.js (圖像處理) 與 jsPDF (生成 PDF) -->
+    <script async src="https://opencv.org" onload="onOpenCvReady();" type="text/javascript"></script>
+    <script src="https://cloudflare.com"></script>
+    <style>
+        body {
+            font-family: 'PingFang HK', 'Helvetica Neue', Arial, sans-serif;
+            background-color: #f4f6f9; margin: 0; padding: 20px;
+            display: flex; flex-direction: column; align-items: center;
+        }
+        .container {
+            max-width: 1000px; width: 100%; background: white;
+            padding: 30px; border-radius: 16px; box-shadow: 0 4px 20px rgba(0,0,0,0.06);
+            text-align: center; box-sizing: border-box;
+        }
+        h1 { color: #1e3a8a; margin-bottom: 5px; }
+        p.subtitle { color: #64748b; margin-bottom: 25px; }
+        .status { color: #f59e0b; font-weight: bold; margin-bottom: 15px; }
+        
+        /* 上傳與相機區域 */
+        .upload-zone {
+            display: flex; gap: 15px; justify-content: center; margin-bottom: 20px; flex-wrap: wrap;
+        }
+        .btn-upload {
+            position: relative; background: #3b82f6; color: white; padding: 12px 24px;
+            border-radius: 8px; font-weight: bold; cursor: pointer; display: inline-block;
+        }
+        .btn-upload input { position: absolute; top:0; left:0; width:100%; height:100%; opacity:0; cursor:pointer; }
+        
+        /* 控制面板 */
+        .control-panel {
+            background: #f8fafc; padding: 15px; border-radius: 12px; margin-bottom: 25px;
+            display: flex; justify-content: center; gap: 20px; align-items: center; flex-wrap: wrap;
+        }
+        .btn {
+            color: white; border: none; padding: 10px 20px; font-size: 15px;
+            border-radius: 6px; cursor: pointer; font-weight: bold; transition: 0.2s;
+        }
+        .btn-blue { background: #2563eb; } .btn-blue:hover { background: #1d4ed8; }
+        .btn-green { background: #10b981; } .btn-green:hover { background: #059669; }
+        .btn-purple { background: #8b5cf6; } .btn-purple:hover { background: #7c3aed; }
+        .btn:disabled, .btn-upload:has(input:disabled) { background: #cbd5e1; cursor: not-allowed; }
 
+        /* 工具選擇 */
+        .tool-select { display: flex; gap: 10px; align-items: center; }
+        .tool-btn { background: #e2e8f0; border: 1px solid #cbd5e1; padding: 6px 12px; border-radius: 4px; cursor: pointer; }
+        .tool-btn.active { background: #3b82f6; color: white; border-color: #2563eb; }
+
+        /* 工作與預覽區 */
+        .preview-area { display: flex; gap: 20px; justify-content: center; flex-wrap: wrap; }
+        .box { flex: 1; min-width: 300px; max-width: 480px; }
+        .box h3 { color: #334155; margin-bottom: 10px; }
+        img, canvas { max-width: 100%; height: auto; border: 1px solid #e2e8f0; border-radius: 8px; background: #fff; }
+        canvas { cursor: crosshair; }
+    </style>
+</head>
+<body>
+
+<div class="container">
+    <h1>📝 etotalshk 試卷筆跡擦除控制中心</h1>
+    <p class="subtitle">專業級別：AI 去墨水 • 手動修補 • 批量打包可列印 PDF</p>
+
+    <!-- 系統狀態提示 -->
+    <div id="status" class="status">正在加載 AI 圖像處理引擎，請稍候...</div>
+
+    <!-- 1. 上傳與相機快拍（支援即拍即傳） -->
+    <div class="upload-zone">
+        <div class="btn-upload" id="upload-box-file">
+            📁 從相簿選取試卷
+            <input type="file" id="file-input" accept="image/*" disabled>
+        </div>
+        <div class="btn-upload" id="upload-box-cam" style="background: #14b8a6;">
+            📸 用相機直接拍照
+            <input type="file" id="camera-input" accept="image/*" capture="environment" disabled>
+        </div>
+    </div>
+
+    <!-- 2. 控制與手動橡皮擦面板 -->
+    <div class="control-panel">
+        <label>去筆跡強度：
+            <input type="number" id="strength" value="3" min="1" max="10" style="width: 45px; padding: 5px;">
+        </label>
+
+        <button id="process-btn" class="btn btn-blue" disabled>✨ 執行 AI 自動擦除</button>
+
+        <!-- 手動局部修補工具 -->
+        <div class="tool-select">
+            <span>局部手動修補：</span>
+            <button id="tool-erase" class="tool-btn active">⚪ 橡皮擦(變白)</button>
+            <button id="tool-restore" class="tool-btn">⚫ 恢復筆刷(還原)</button>
+            <label><input type="range" id="brush-size" min="5" max="50" value="20" style="width:70px;">大小</label>
+        </div>
+
+        <button id="pdf-btn" class="btn btn-purple" disabled>📄 加入並打包 PDF</button>
+    </div>
+
+    <!-- 3. 雙畫布實時對比預覽 -->
+    <div class="preview-area">
+        <div class="box">
+            <h3>原圖（含有手寫字）</h3>
+            <img id="image-src" alt="請先上傳或拍照..." />
+        </div>
+        <div class="box">
+            <h3>處理結果（可直接手動塗抹修改）</h3>
+            <canvas id="canvas-output"></canvas>
+        </div>
+    </div>
+</div>
+
+<script>
+    const imgElement = document.getElementById('image-src');
+    const fileInput = document.getElementById('file-input');
+    const cameraInput = document.getElementById('camera-input');
+    const processBtn = document.getElementById('process-btn');
+    const pdfBtn = document.getElementById('pdf-btn');
+    const statusText = document.getElementById('status');
+    const canvas = document.getElementById('canvas-output');
+    const ctx = canvas.getContext('2d');
+
+    let pdfPages = []; // 儲存準備打包的試卷頁面
+    let isDrawing = false;
+    let currentTool = 'erase'; // erase = 塗白, restore = 複製原圖歷史
+    let originalBackup = null; // 用於局部恢復的原圖數據
+
+    // 當 OpenCV 加載成功
+    function onOpenCvReady() {
+        statusText.innerText = "⚡ 系統引擎已就緒！請點擊上方按鈕上傳或相機拍照。";
+        statusText.style.color = "#10b981";
+        fileInput.disabled = false;
+        cameraInput.disabled = false;
+    }
+
+    // 處理圖片載入匯入
+    function handleImage(file) {
+        if (!file) return;
+        statusText.innerText = "⏳ 正在載入圖片中...";
+        statusText.style.color = "#f59e0b";
+        imgElement.src = URL.createObjectURL(file);
+    }
+    fileInput.addEventListener('change', (e) => handleImage(e.target.files[0]));
+    cameraInput.addEventListener('change', (e) => handleImage(e.target.files[0]));
+
+    imgElement.onload = function() {
+        processBtn.disabled = false;
+        statusText.innerText = "👍 圖片載入完成，請點選「執行 AI 自動擦除」。";
+        statusText.style.color = "#2563eb";
+    };
+
+    // 功能一：AI 自動擦除演算法
+    processBtn.addEventListener('click', () => {
+        statusText.innerText = "⏳ AI 正在智能分析結構、移除筆跡並漂白背景...";
+        statusText.style.color = "#f59e0b";
+
+        setTimeout(() => {
+            try {
+                let src = cv.imread(imgElement);
+                let gray = new cv.Mat();
+                let dst = new cv.Mat();
+
+                // 轉為灰階（初步濾除彩色原子筆墨水）
+                cv.cvtColor(src, gray, cv.COLOR_RGBA2GRAY, 0);
+
+                // 自適應黑白二值化（強制漂白背景，抹除手寫痕跡，保留深色印刷字）
+                let strengthVal = parseInt(document.getElementById('strength').value) || 3;
+                let blockSize = 21 + (strengthVal * 2);
+                cv.adaptiveThreshold(gray, dst, 255, cv.ADAPTIVE_THRESH_GAUSSIAN_C, cv.THRESH_BINARY, blockSize, 15);
+
+                // 渲染到網頁 Canvas 上
+                cv.imshow('canvas-output', dst);
+
+                // 備份一份原始影像快照，以便後續進行「手動局部恢復」
+                originalBackup = ctx.getImageData(0, 0, canvas.width, canvas.height);
+
+                src.delete(); gray.delete(); dst.delete();
+
+                statusText.innerText = "✅ AI 擦除完成！若局部有瑕疵，可直接在右側畫布進行「手動修補」。";
+                statusText.style.color = "#10b981";
+                pdfBtn.disabled = false;
+            } catch (err) {
+                statusText.innerText = "❌ 處理失敗，請換一張更清晰的圖片再試。";
+                statusText.style.color = "#ef4444";
+                console.error(err);
+            }
+        }, 50);
+    });
+
+    // 功能二：手動修補與橡皮擦滑鼠/觸控事件
+    document.getElementById('tool-erase').addEventListener('click', (e) => {
+        currentTool = 'erase';
+        document.querySelectorAll('.tool-btn').forEach(b => b.classList.remove('active'));
+        e.target.classList.add('active');
+    });
+    document.getElementById('tool-restore').addEventListener('click', (e) => {
+        currentTool = 'restore';
+        document.querySelectorAll('.tool-btn').forEach(b => b.classList.remove('active'));
+        e.target.classList.add('active');
+    });
+
+    function getMousePos(e) {
+        const rect = canvas.getBoundingClientRect();
+        // 相容手機觸控與滑鼠
+        const clientX = e.touches ? e.touches[0].clientX : e.clientX;
+        const clientY = e.touches ? e.touches[0].clientY : e.clientY;
+        return {
+            x: (clientX - rect.left) * (canvas.width / rect.width),
+            y: (clientY - rect.top) * (canvas.height / rect.height)
+        };
+    }
+
+    function startDraw(e) { if(!originalBackup) return; isDrawing = true; draw(e); }
+    function endDraw() { isDrawing = false; ctx.beginPath(); }
+
+    function draw(e) {
+        if (!isDrawing) return;
+        e.preventDefault();
+        const pos = getMousePos(e);
+        const brushSize = document.getElementById('brush-size').value;
+
+        ctx.lineWidth = brushSize;
+        ctx.lineCap = 'round';
+
+        if (currentTool === 'erase') {
+            // 橡皮擦模式：直接將局部塗抹為純白色
+            ctx.strokeStyle = '#ffffff';
+            ctx.lineTo(pos.x, pos.y);
+            ctx.stroke();
+            ctx.beginPath();
+            ctx.moveTo(pos.x, pos.y);
+        } else if (currentTool === 'restore') {
+            // 恢復模式：將原始拍照的色彩數據局部貼回來
+            ctx.save();
+            ctx.beginPath();
+            ctx.arc(pos.x, pos.y, brushSize / 2, 0, Math.PI * 2);
+            ctx.clip();
+            // 建立一個臨時 canvas 把原圖蓋上來
+            let tempCanvas = document.createElement('canvas');
+            tempCanvas.width = canvas.width; tempCanvas.height = canvas.height;
+            let tempCtx = tempCanvas.getContext('2d');
+            tempCtx.drawImage(imgElement, 0, 0, canvas.width, canvas.height);
