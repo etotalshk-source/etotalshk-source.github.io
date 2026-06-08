@@ -5,8 +5,7 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>etotalshk - 專業試卷筆跡擦除與 PDF 打包平台</title>
     
-    <!-- 引入穩定且全球通用的 OpenCV.js 與 jsPDF 核心加速節點 -->
-    <script src="https://cloudflare.com" type="text/javascript" defer></script>
+    <!-- ⚡ 已完全移除 OpenCV.js 外連，100% 解決下載卡死問題 ⚡ -->
     <script src="https://cloudflare.com"></script>
 
     <style>
@@ -22,7 +21,7 @@
         }
         h1 { color: #1e3a8a; margin-bottom: 5px; font-size: 24px; }
         p.subtitle { color: #64748b; margin-bottom: 25px; font-size: 14px; }
-        .status { color: #dc3545; font-weight: bold; margin-bottom: 15px; font-size: 16px; background: #ffeeba; padding: 10px; border-radius: 8px; display: inline-block; }
+        .status { color: #10b981; font-weight: bold; margin-bottom: 15px; font-size: 16px; background: #d1fae5; padding: 10px; border-radius: 8px; display: inline-block; }
         
         .url-zone {
             background: #f1f5f9; padding: 15px; border-radius: 12px; margin-bottom: 20px;
@@ -80,13 +79,14 @@
     <h1>📝 etotalshk 試卷筆跡擦除控制中心</h1>
     <p class="subtitle">專業級別：原生 AI 去墨水 • 手動修補 • 批量打包可列印 PDF</p>
 
-    <div id="status" class="status">⏳ 正在下載 AI 核心引擎，請稍候約 5~10 秒...</div>
+    <!-- ⚡ 預設直接就緒 ⚡ -->
+    <div id="status" class="status">✅ 系統原生引擎已就緒！請選擇一種方式放入考卷。</div>
 
     <!-- 方案 A -->
     <div class="url-zone">
         <span>🔗 方案 A：輸入網路圖片網址 </span>
         <input type="text" id="url-input" class="url-input" placeholder="請在此貼上圖片連結">
-        <button id="url-btn" class="btn btn-blue" style="padding: 8px 15px; font-size: 14px;" disabled>載入網路圖</button>
+        <button id="url-btn" class="btn btn-blue" style="padding: 8px 15px; font-size: 14px;">載入網路圖</button>
     </div>
 
     <!-- 方案 B / C -->
@@ -107,7 +107,7 @@
             <input type="number" id="strength" value="5" min="1" max="10" style="width: 45px; padding: 5px;">
         </label>
 
-        <button id="process-btn" class="btn btn-blue" disabled>✨ 執行 AI 自動擦除</button>
+        <button id="process-btn" class="btn btn-blue">✨ 執行 AI 自動擦除</button>
 
         <div class="tool-select">
             <span>局部手動修補：</span>
@@ -158,19 +158,6 @@
     let currentTool = 'erase'; 
     let isImageLoaded = false; 
 
-    // 自動檢測 OpenCV.js 是否加載完畢
-    let checkOpenCV = setInterval(() => {
-        if (typeof cv !== 'undefined' && cv.Mat) {
-            clearInterval(checkOpenCV);
-            statusText.innerText = "✅ 系統原生引擎已就緒！請選擇一種方式放入考卷。";
-            statusText.style.color = "#10b981";
-            statusText.style.background = "#d1fae5";
-            
-            urlBtn.disabled = false;
-            processBtn.disabled = false;
-        }
-    }, 500);
-
     // 方案 A：網址讀取邏輯
     urlBtn.addEventListener('click', function() {
         const url = urlInput.value.trim();
@@ -208,24 +195,37 @@
         updateStatus("❌ 圖片載入失敗。若使用方案 A，可能對方網站有防盜連限制，請直接改用方案 B 或 C！", "#dc3545", "#fee2e2");
     };
 
-    // ✨ 核心：AI 智能去筆跡算法（已完全修正空白參數）
+    // ✨ 核心：純原生 JS 高速去筆跡算法（不依賴任何外部庫）
     processBtn.addEventListener('click', function() {
         if (!isImageLoaded) return alert("請先上傳或拍攝一張試卷照片！");
         updateStatus("⏳ 正在提取色彩矩陣、過濾原子筆墨水...", "#2563eb", "#dbeafe");
 
         setTimeout(() => {
             try {
-                let src = cv.imread(imgElement);
-                let hsv = new cv.Mat();
-                let mask1 = new cv.Mat();
-                let mask2 = new cv.Mat();
-                let mask3 = new cv.Mat();
-                let maskRed = new cv.Mat();
-                let mask = new cv.Mat();
-                let inpainted = new cv.Mat();
-                let gray = new cv.Mat();
-                let thresh = new cv.Mat();
+                // 設定畫布大小與原圖一致
+                canvas.width = imgElement.naturalWidth;
+                canvas.height = imgElement.naturalHeight;
+                
+                // 將原圖繪製入 Canvas
+                ctx.drawImage(imgElement, 0, 0);
+                
+                // 取得像素矩陣數據 [R, G, B, A, R, G, B, A...]
+                const imgData = ctx.getImageData(0, 0, canvas.width, canvas.height);
+                const data = imgData.data;
+                
+                const strengthVal = parseInt(document.getElementById('strength').value) || 5;
+                // 強度閾值調整 (強度越高，對非黑色的判定越寬容)
+                const threshold = 15 + (strengthVal * 5); 
 
-                let strengthVal = parseInt(document.getElementById('strength').value) || 5;
-                // 適應性二值化的區塊大小，必須為奇數
-                let blockSize = 11 + (strengthVal * 2); 
+                for (let i = 0; i < data.length; i += 4) {
+                    let r = data[i];
+                    let g = data[i + 1];
+                    let b = data[i + 2];
+
+                    // 💡 演算法判定 1：藍色原子筆特徵 (B 顯著大於 R 和 G)
+                    let isBlue = (b - r > threshold) && (b - g > threshold - 5);
+                    
+                    // 💡 演算法判定 2：紅色批改筆特徵 (R 顯著大於 G 和 B)
+                    let isRed = (r - g > threshold) && (r - b > threshold);
+
+                    // 💡 演算法判定 3：過濾拍照陰影與底色（背景白化增強）
