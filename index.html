@@ -1,143 +1,3 @@
-<!DOCTYPE html>
-<html lang="zh-Hant-HK">
-<head>
-    <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>etotalshk - 專業試卷筆跡擦除與 PDF 打包平台</title>
-    
-    <!-- ⚡ 已完全移除 OpenCV.js 外連，100% 解決下載卡死問題 ⚡ -->
-    <script src="https://cloudflare.com"></script>
-
-    <style>
-        body {
-            font-family: 'PingFang HK', 'Helvetica Neue', Arial, sans-serif;
-            background-color: #f4f6f9; margin: 0; padding: 20px;
-            display: flex; flex-direction: column; align-items: center;
-        }
-        .container {
-            max-width: 1000px; width: 100%; background: white;
-            padding: 30px; border-radius: 16px; box-shadow: 0 4px 20px rgba(0,0,0,0.06);
-            text-align: center; box-sizing: border-box;
-        }
-        h1 { color: #1e3a8a; margin-bottom: 5px; font-size: 24px; }
-        p.subtitle { color: #64748b; margin-bottom: 25px; font-size: 14px; }
-        .status { color: #10b981; font-weight: bold; margin-bottom: 15px; font-size: 16px; background: #d1fae5; padding: 10px; border-radius: 8px; display: inline-block; }
-        
-        .url-zone {
-            background: #f1f5f9; padding: 15px; border-radius: 12px; margin-bottom: 20px;
-            display: flex; gap: 10px; justify-content: center; align-items: center; flex-wrap: wrap;
-        }
-        .url-input {
-            width: 50%; min-width: 250px; padding: 10px; border: 1px solid #cbd5e1; border-radius: 6px; font-size: 14px;
-        }
-
-        .upload-zone {
-            display: flex; gap: 20px; justify-content: center; margin-bottom: 25px; flex-wrap: wrap;
-        }
-        .upload-card {
-            background: #eff6ff; border: 2px dashed #3b82f6; border-radius: 12px;
-            padding: 15px 30px; cursor: pointer; text-align: center; transition: 0.2s;
-            font-weight: bold; color: #1d4ed8; font-size: 16px; min-width: 200px;
-        }
-        .upload-card:hover { background: #dbeafe; }
-        .upload-card input { display: none; }
-        
-        .control-panel {
-            background: #f8fafc; padding: 15px; border-radius: 12px; margin-bottom: 25px;
-            display: flex; justify-content: center; gap: 20px; align-items: center; flex-wrap: wrap;
-        }
-        .btn {
-            color: white; border: none; padding: 12px 24px; font-size: 16px;
-            border-radius: 6px; cursor: pointer; font-weight: bold; transition: 0.2s;
-        }
-        .btn-blue { background: #2563eb; } .btn-blue:hover { background: #1d4ed8; }
-        .btn-green { background: #10b981; } .btn-green:hover { background: #059669; }
-        .btn-purple { background: #8b5cf6; } .btn-purple:hover { background: #7c3aed; }
-        .btn:disabled { background: #cbd5e1 !important; cursor: not-allowed; }
-
-        .tool-select { display: flex; gap: 10px; align-items: center; }
-        .tool-btn { background: #e2e8f0; border: 1px solid #cbd5e1; padding: 6px 12px; border-radius: 4px; cursor: pointer; }
-        .tool-btn.active { background: #3b82f6; color: white; border-color: #2563eb; }
-
-        .preview-area { display: flex; gap: 20px; justify-content: center; flex-wrap: wrap; width: 100%; }
-        .box { flex: 1; min-width: 300px; max-width: 480px; }
-        .box h3 { color: #334155; margin-bottom: 10px; }
-        
-        .img-wrap, .canvas-wrap { 
-            width: 100%; min-height: 400px; border: 2px dashed #cbd5e1; 
-            border-radius: 8px; background: #fafafa; display: flex; 
-            align-items: center; justify-content: center; overflow: hidden; position: relative;
-        }
-        img, canvas { max-width: 100%; max-height: 600px; height: auto; display: none; }
-        .placeholder-text { color: #94a3b8; font-size: 14px; position: absolute; }
-        canvas { cursor: crosshair; }
-    </style>
-</head>
-<body>
-
-<div class="container">
-    <h1>📝 etotalshk 試卷筆跡擦除控制中心</h1>
-    <p class="subtitle">專業級別：原生 AI 去墨水 • 手動修補 • 批量打包可列印 PDF</p>
-
-    <!-- ⚡ 預設直接就緒 ⚡ -->
-    <div id="status" class="status">✅ 系統原生引擎已就緒！請選擇一種方式放入考卷。</div>
-
-    <!-- 方案 A -->
-    <div class="url-zone">
-        <span>🔗 方案 A：輸入網路圖片網址 </span>
-        <input type="text" id="url-input" class="url-input" placeholder="請在此貼上圖片連結">
-        <button id="url-btn" class="btn btn-blue" style="padding: 8px 15px; font-size: 14px;">載入網路圖</button>
-    </div>
-
-    <!-- 方案 B / C -->
-    <div class="upload-zone">
-        <div class="upload-card" onclick="document.getElementById('file-input').click()">
-            📁 方案 B：點此從相簿選取試卷
-            <input type="file" id="file-input" accept="image/*">
-        </div>
-        <div class="upload-card" style="background: #f0fdf4; border-color: #10b981; color: #15803d;" onclick="document.getElementById('camera-input').click()">
-            📸 方案 C：點此用相機直接拍照
-            <input type="file" id="camera-input" accept="image/*" capture="environment">
-        </div>
-    </div>
-
-    <!-- 控制面板 -->
-    <div class="control-panel">
-        <label>去筆跡強度 (1-10)：
-            <input type="number" id="strength" value="5" min="1" max="10" style="width: 45px; padding: 5px;">
-        </label>
-
-        <button id="process-btn" class="btn btn-blue">✨ 執行 AI 自動擦除</button>
-
-        <div class="tool-select">
-            <span>局部手動修補：</span>
-            <button id="tool-erase" class="tool-btn active">⚪ 橡皮擦(變白)</button>
-            <button id="tool-restore" class="tool-btn">⚫ 恢復筆刷(還原)</button>
-            <label><input type="range" id="brush-size" min="5" max="60" value="25" style="width:70px;">大小</label>
-        </div>
-
-        <button id="pdf-btn" class="btn btn-purple" disabled>📄 加入並打包 PDF</button>
-    </div>
-
-    <!-- 雙畫布實時對比預覽 -->
-    <div class="preview-area">
-        <div class="box">
-            <h3>原圖（含有手寫字）</h3>
-            <div class="img-wrap">
-                <span id="text-src-placeholder" class="placeholder-text">📸 請先透過上方功能框放入試卷照片</span>
-                <img id="image-src" alt="原圖" crossorigin="anonymous" />
-            </div>
-        </div>
-        <div class="box">
-            <h3>處理結果（可直接手動塗抹修改）</h3>
-            <div class="canvas-wrap">
-                <span id="text-dst-placeholder" class="placeholder-text">✨ 點擊「執行 AI 自動擦除」後在此顯示</span>
-                <canvas id="canvas-output"></canvas>
-            </div>
-        </div>
-    </div>
-</div>
-
 <script>
     const imgElement = document.getElementById('image-src');
     const fileInput = document.getElementById('file-input');
@@ -195,26 +55,28 @@
         updateStatus("❌ 圖片載入失敗。若使用方案 A，可能對方網站有防盜連限制，請直接改用方案 B 或 C！", "#dc3545", "#fee2e2");
     };
 
-    // ✨ 核心：純原生 JS 高速去筆跡算法（不依賴任何外部庫）
+    // ✨ 核心：純原生 JS 高速去筆跡算法
     processBtn.addEventListener('click', function() {
         if (!isImageLoaded) return alert("請先上傳或拍攝一張試卷照片！");
         updateStatus("⏳ 正在提取色彩矩陣、過濾原子筆墨水...", "#2563eb", "#dbeafe");
 
         setTimeout(() => {
             try {
-                // 設定畫布大小與原圖一致
                 canvas.width = imgElement.naturalWidth;
                 canvas.height = imgElement.naturalHeight;
                 
-                // 將原圖繪製入 Canvas
                 ctx.drawImage(imgElement, 0, 0);
                 
-                // 取得像素矩陣數據 [R, G, B, A, R, G, B, A...]
-                const imgData = ctx.getImageData(0, 0, canvas.width, canvas.height);
+                // 💡 捕捉安全性報錯
+                let imgData;
+                try {
+                    imgData = ctx.getImageData(0, 0, canvas.width, canvas.height);
+                } catch(corsErr) {
+                    throw new Error("【瀏覽器安全攔截】由於此網路圖片有跨網域保護限制，AI 無法讀取像素。請直接下載圖片到手機中，並改用【方案 B】重新選取上傳，即可順利執行！");
+                }
+
                 const data = imgData.data;
-                
                 const strengthVal = parseInt(document.getElementById('strength').value) || 5;
-                // 強度閾值調整 (強度越高，對非黑色的判定越寬容)
                 const threshold = 15 + (strengthVal * 5); 
 
                 for (let i = 0; i < data.length; i += 4) {
@@ -222,10 +84,122 @@
                     let g = data[i + 1];
                     let b = data[i + 2];
 
-                    // 💡 演算法判定 1：藍色原子筆特徵 (B 顯著大於 R 和 G)
                     let isBlue = (b - r > threshold) && (b - g > threshold - 5);
-                    
-                    // 💡 演算法判定 2：紅色批改筆特徵 (R 顯著大於 G 和 B)
                     let isRed = (r - g > threshold) && (r - b > threshold);
 
-                    // 💡 演算法判定 3：過濾拍照陰影與底色（背景白化增強）
+                    let gray = 0.299 * r + 0.587 * g + 0.114 * b;
+                    let isBackground = gray > (255 - strengthVal * 15);
+
+                    if (isBlue || isRed || isBackground) {
+                        data[i] = 255;  
+                        data[i + 1] = 255; 
+                        data[i + 2] = 255; 
+                    } else {
+                        let enhance = gray < 120 ? 0 : gray;
+                        data[i] = enhance;
+                        data[i + 1] = enhance;
+                        data[i + 2] = enhance;
+                    }
+                }
+
+                ctx.putImageData(imgData, 0, 0);
+                
+                dstPlaceholder.style.display = 'none';
+                canvas.style.display = 'block';
+                pdfBtn.disabled = false;
+                updateStatus("🎉 擦除完成！如邊緣有殘留黑點，可使用下方【局部手動修補】手動塗抹抹除。", "#10b981", "#d1fae5");
+
+            } catch (err) {
+                // 顯示人性化的錯誤引導
+                updateStatus(err.message, "#dc3545", "#fee2e2");
+                alert(err.message);
+                canvas.style.display = 'none';
+                dstPlaceholder.style.display = 'block';
+            }
+        }, 50);
+    });
+
+    // 局部手動修補按鈕切換
+    document.getElementById('tool-erase').addEventListener('click', function() {
+        currentTool = 'erase';
+        this.classList.add('active');
+        document.getElementById('tool-restore').classList.remove('active');
+    });
+    document.getElementById('tool-restore').addEventListener('click', function() {
+        currentTool = 'restore';
+        this.classList.add('active');
+        document.getElementById('tool-erase').classList.remove('active');
+    });
+
+    function getCanvasPos(e) {
+        const rect = canvas.getBoundingClientRect();
+        const clientX = e.touches ? e.touches.clientX : e.clientX;
+        const clientY = e.touches ? e.touches.clientY : e.clientY;
+        return {
+            x: (clientX - rect.left) * (canvas.width / rect.width),
+            y: (clientY - rect.top) * (canvas.height / rect.height)
+        };
+    }
+
+    function startDraw(e) { if(canvas.style.display !== 'block') return; isDrawing = true; draw(e); }
+    function endDraw() { isDrawing = false; ctx.beginPath(); }
+    
+    function draw(e) {
+        if (!isDrawing) return;
+        e.preventDefault();
+        const pos = getCanvasPos(e);
+        const size = document.getElementById('brush-size').value;
+
+        ctx.lineWidth = size;
+        ctx.lineCap = 'round';
+
+        if (currentTool === 'erase') {
+            ctx.strokeStyle = '#ffffff'; 
+            ctx.lineTo(pos.x, pos.y);
+            ctx.stroke();
+        } else {
+            ctx.save();
+            ctx.beginPath();
+            ctx.arc(pos.x, pos.y, size / 2, 0, Math.PI * 2);
+            ctx.clip();
+            ctx.drawImage(imgElement, 0, 0, canvas.width, canvas.height);
+            ctx.restore();
+        }
+        ctx.beginPath();
+        ctx.moveTo(pos.x, pos.y);
+    }
+
+    canvas.addEventListener('mousedown', startDraw);
+    canvas.addEventListener('mousemove', draw);
+    window.addEventListener('mouseup', endDraw);
+    canvas.addEventListener('touchstart', startDraw, { passive: false });
+    canvas.addEventListener('touchmove', draw, { passive: false });
+    window.addEventListener('touchend', endDraw);
+
+    // PDF 打包功能
+    pdfBtn.addEventListener('click', function() {
+        const imgData = canvas.toDataURL('image/jpeg', 0.9);
+        pdfPages.push({ data: imgData, w: canvas.width, h: canvas.height });
+        
+        let confirmAction = confirm(`已成功將此頁加入暫存（目前共 ${pdfPages.length} 頁）。\n點擊「確定」立即下載整份 PDF，點擊「取消」可繼續上傳下一頁試卷共同打包。`);
+        
+        if(confirmAction) {
+            const { jsPDF } = window.jspdf;
+            const pdf = new jsPDF({ orientation: pdfPages.w > pdfPages.h ? 'l' : 'p', unit: 'px', format: [pdfPages.w, pdfPages.h] });
+            
+            for(let i=0; i<pdfPages.length; i++) {
+                if(i > 0) pdf.addPage([pdfPages[i].w, pdfPages[i].h], pdfPages[i].w > pdfPages[i].h ? 'l' : 'p');
+                pdf.addImage(pdfPages[i].data, 'JPEG', 0, 0, pdfPages[i].w, pdfPages[i].h);
+            }
+            pdf.save('etotalshk_cleaned_exams.pdf');
+            pdfPages = []; 
+            pdfBtn.disabled = true;
+        }
+    });
+
+    function updateStatus(text, textColor, bgColor) {
+        statusText.innerText = text;
+        statusText.style.color = textColor;
+        statusText.style.backgroundColor = bgColor;
+    }
+</script>
