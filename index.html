@@ -138,10 +138,12 @@
     let originalBackup = null; 
     let isImageLoaded = false; 
 
-    // 【核心 bug 修正】精準獲取陣列第 0 個單一檔案物件
-    function handleImage(files) {
+    // 【核心修正】採用全瀏覽器、跨平台最穩定的標準取檔事件機制
+    function handleImage(event) {
+        const files = event.target.files;
         if (!files || files.length === 0) return;
-        const file = files[0]; // 修正：精確提取數組內的第一個檔案
+        
+        const file = files[0]; // 修正：使用最標準的陣列索引取出檔案本身
 
         statusText.innerText = "⏳ 正在將圖片載入網頁畫布中...";
         statusText.style.color = "#f59e0b";
@@ -152,11 +154,16 @@
             imgElement.style.display = 'block';
             imgElement.src = e.target.result; 
         };
+        reader.onerror = function() {
+            statusText.innerText = "❌ 瀏覽器讀取檔案失敗，請換一張圖片試試。";
+            statusText.style.color = "#ef4444";
+        };
         reader.readAsDataURL(file);
     }
     
-    fileInput.addEventListener('change', (e) => handleImage(e.target.files));
-    cameraInput.addEventListener('change', (e) => handleImage(e.target.files));
+    // 修正監聽器：直接傳遞整個 event 物件
+    fileInput.addEventListener('change', (e) => handleImage(e));
+    cameraInput.addEventListener('change', (e) => handleImage(e));
 
     imgElement.onload = function() {
         isImageLoaded = true; 
@@ -167,7 +174,7 @@
     // 點擊執行自動擦除
     processBtn.addEventListener('click', () => {
         if (!isImageLoaded) {
-            alert("請先點選上方的藍色或綠色框選取您的考卷照片，確認左邊看到圖片後再按我喔！");
+            alert("請先選取您的考卷照片，確認左邊看到圖片後再點擊執行喔！");
             return;
         }
 
@@ -231,9 +238,3 @@
     });
     document.getElementById('tool-restore').addEventListener('click', (e) => {
         currentTool = 'restore';
-        document.querySelectorAll('.tool-btn').forEach(b => b.classList.remove('active'));
-        e.target.classList.add('active');
-    });
-
-    function getMousePos(e) {
-        const rect = canvas.getBoundingClientRect();
